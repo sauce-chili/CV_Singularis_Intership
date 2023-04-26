@@ -27,7 +27,7 @@ def main(args):
     in_path = args.in_video
     out_path = args.out_path
 
-    print("Start")
+    print("Highlighting an object...")
 
     object_highlighter.highlight_object_on_video(
         in_path_video=in_path,
@@ -39,5 +39,15 @@ def main(args):
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    args = None
+    try:
+        args = parse_args()
+    except FileNotFoundError as fnf_exp:
+        print(str(fnf_exp))
+        exit()
+    except Exception as exp:
+        print(str(exp))
+        print("Invalid args. Exit...")
+        exit()
+
     main(args)
