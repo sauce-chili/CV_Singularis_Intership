@@ -1,5 +1,5 @@
-import os.path
 from pathlib import Path
+from typing import Iterable
 
 import torch
 import numpy as np
@@ -31,32 +31,36 @@ class YoloObjectHighlighter(VideoObjectHighlighter):
         model.warmup(imgsz=(1, 3, *self.__img_shape))  # Run inference
         self.__model = model
 
-        self.__conf_thres = 0.68
-        self.__iou_thres = 0.55
+        self.__conf_thresh = 0.65
+        self.__iou_thresh = 0.50
 
-    def highlight_object_on_video(self, in_path_video: str, out_path_folder: str, out_file_name: str,
-                                  highlightable_object_class: str):
+        # for display debug info TODO remove this
+        self.__debug = False
+
+    def highlight_object_on_video(self, in_path_video: str, highlightable_object_class: str,
+                                  out_path_video: str):
         # TODO check if the paths exists
 
         # Dataloader
         frame_provider = LoadImages(in_path_video, img_size=self.__img_shape,
                                     stride=self.__model.stride, auto=self.__model.pt)
 
-        video_writer = self.__get_video_writer(frame_provider.cap, out_path_folder, out_file_name)
+        video_writer = self.__get_video_writer(frame_provider.cap, out_path_video)
 
         for _, transform_img, original_img, vid_cap, _ in frame_provider:
             # frame transformation for input-layer
             transform_img = self.__convert_to_input_img(transform_img)
 
-            cv2.imshow("Origin", original_img)
+            if self.__debug: cv2.imshow("Origin", original_img)
 
             # predict
             pred = self.__model(transform_img)
             # normalizing predictions by removing overlapping predictions
-            pred = non_max_suppression(pred, self.__conf_thres, self.__iou_thres, agnostic=False)
+            pred = non_max_suppression(pred, self.__conf_thresh, self.__iou_thresh, agnostic=False)
 
             # conversion of predictions to ``PredictionResult's``
-            detected_object: list[PredictionResult] = self.__processing_prediction(pred, transform_img, original_img)
+            detected_object: list[PredictionResult] = self.__processing_prediction(pred, transform_img,
+                                                                                   original_img)
 
             # selection of only necessary predictions
             filter_func = lambda det: det.class_name == highlightable_object_class
@@ -70,15 +74,15 @@ class YoloObjectHighlighter(VideoObjectHighlighter):
             # save frame with ``highlightable_object_class``
             video_writer.write(mask)
 
-            cv2.imshow("Mask", mask)
-            print(detected_object)
-
-            cv2.waitKey(33)
+            if self.__debug:
+                cv2.imshow("Mask", mask)
+                print(list(detected_object))
+                cv2.waitKey(33)
 
         video_writer.release()
 
     def __get_video_writer(self, cam_capture: cv2.VideoCapture,
-                           out_folder_path: str, file_name: str) -> cv2.VideoWriter:
+                           out_video_path: str) -> cv2.VideoWriter:
 
         w = cam_capture.get(cv2.CAP_PROP_FRAME_WIDTH)
         h = cam_capture.get(cv2.CAP_PROP_FRAME_HEIGHT)
@@ -86,9 +90,8 @@ class YoloObjectHighlighter(VideoObjectHighlighter):
 
         fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
         fps = cam_capture.get(cv2.CAP_PROP_FPS)
-        path = os.path.join(out_folder_path, file_name)
 
-        return cv2.VideoWriter(path, fourcc, fps, shape)
+        return cv2.VideoWriter(out_video_path, fourcc, fps, shape)
 
     def __convert_to_input_img(self, image):
 
@@ -123,12 +126,11 @@ class YoloObjectHighlighter(VideoObjectHighlighter):
 
         return result
 
-    def __highlight_object(self, image: np.ndarray, detected_objects: list[PredictionResult]) -> np.ndarray:
+    def __highlight_object(self, image: np.ndarray, detected_objects: Iterable[PredictionResult]) -> np.ndarray:
 
         mask = np.zeros_like(image)
 
-        for det in detected_objects:
-            x_min, y_min, x_max, y_max = det.bbox
+        for x_min, y_min, x_max, y_max in [det.bbox for det in detected_objects]:
 
             mask[y_min: y_max, x_min: x_max] = image[y_min: y_max, x_min: x_max]
 

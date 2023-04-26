@@ -1,0 +1,5 @@
+weigh: ./weight/yolov5m.pt
+classes_name: ./weight/coco128.yaml
+input_shape:
+  width: 640
+  height: 640
